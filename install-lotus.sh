@@ -18,4 +18,4 @@ sudo apt update
 sudo apt install fcitx5-lotus -y
 im-config -n fcitx5 
 echo
-echo "done, reboot or lougout"
+echo "done, reboot or logout"

@@ -7,3 +7,7 @@ bash <(curl -fsSL https://raw.githubusercontent.com/longnguyen2026/install-fcitx
 ```bash
 bash <(curl -fsSL https://raw.githubusercontent.com/longnguyen2026/install-fcitx5-lotus/main/install-lotus-v2.sh)
 ```
+# Bản cài đặt Lotus nâng cấp đã fix lỗi lag Kubuntu
+```bash
+bash <(curl -fsSL https://raw.githubusercontent.com/longnguyen2026/install-fcitx5-lotus/main/install-lotus-v3.sh)
+```

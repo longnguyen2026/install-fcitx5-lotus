@@ -232,7 +232,64 @@ echo -e "${YELLOW}Installing Lotus engine...${NC}"
 
 sudo apt update
 
+# Some fcitx5-lotus 3.5.6-1 packages contain a /bin/sh postinst
+# with an empty "then" branch:
+#     if systemctl ...; then
+#     else
+#         ...
+#     fi
+# This is rejected by dash on Ubuntu/Zorin. Patch the installed
+# maintainer script before retrying configuration.
+patch_lotus_postinst() {
+    local POSTINST="/var/lib/dpkg/info/fcitx5-lotus.postinst"
+
+    if [ ! -f "$POSTINST" ]; then
+        return 0
+    fi
+
+    if sudo grep -qF 'if systemctl enable --now "fcitx5-lotus-server@${REAL_USER}.service" 2>/dev/null; then' "$POSTINST" \
+        && sudo grep -qF '            else' "$POSTINST"; then
+
+        echo -e "${YELLOW}Checking Lotus post-install script...${NC}"
+
+        sudo sed -i '/if systemctl enable --now "fcitx5-lotus-server@${REAL_USER}.service"/,+3c\
+        if systemctl enable --now "fcitx5-lotus-server@${REAL_USER}.service" 2>/dev/null; then\
+            :\
+        else\
+            printf "%b\\n" "  ${yellow}⚠ Chạy lệnh sau để bật service: sudo systemctl enable --now fcitx5-lotus-server@${REAL_USER}.service${all_off}"\
+        fi' "$POSTINST"
+
+        echo -e "${GREEN}Lotus post-install script patched.${NC}"
+    fi
+}
+
 if ! sudo apt install -y fcitx5-lotus; then
+    # The package may already be unpacked but fail during configure.
+    patch_lotus_postinst
+
+    echo -e "${YELLOW}Retrying Lotus configuration...${NC}"
+    if ! sudo dpkg --configure fcitx5-lotus; then
+        echo
+        echo -e "${RED}Failed to configure fcitx5-lotus.${NC}"
+        echo -e "${YELLOW}Showing the Lotus post-install script for diagnosis:${NC}"
+        sudo nl -ba /var/lib/dpkg/info/fcitx5-lotus.postinst | sed -n '1,80p' || true
+        exit 1
+    fi
+fi
+
+# If apt installed/unpacked Lotus but left it unconfigured, make sure the
+# known postinst issue is repaired and finish configuration.
+if ! dpkg-query -W -f='${Status}' fcitx5-lotus 2>/dev/null | grep -q 'install ok installed'; then
+    patch_lotus_postinst
+
+    if ! sudo dpkg --configure fcitx5-lotus; then
+        echo
+        echo -e "${RED}Failed to configure fcitx5-lotus.${NC}"
+        echo -e "${YELLOW}Showing the Lotus post-install script for diagnosis:${NC}"
+        sudo nl -ba /var/lib/dpkg/info/fcitx5-lotus.postinst | sed -n '1,80p' || true
+        exit 1
+    fi
+fi
     echo
     echo -e "${RED}Failed to install fcitx5-lotus.${NC}"
     echo -e "${YELLOW}The Lotus repository may not provide packages for:${NC}"
@@ -242,7 +299,14 @@ if ! sudo apt install -y fcitx5-lotus; then
 fi
 
 # ------------------------------------------------------------
-# 10. Set Fcitx5 as default input method
+# 10. Repair pending packages
+# ------------------------------------------------------------
+echo
+echo -e "${YELLOW}Checking package state...${NC}"
+sudo apt --fix-broken install -y
+
+# ------------------------------------------------------------
+# 11. Set Fcitx5 as default input method
 # ------------------------------------------------------------
 echo
 echo -e "${YELLOW}Setting Fcitx5 as default input method...${NC}"
@@ -252,7 +316,7 @@ if command -v im-config >/dev/null 2>&1; then
 fi
 
 # ------------------------------------------------------------
-# 11. Environment variables
+# 12. Environment variables
 # ------------------------------------------------------------
 echo
 echo -e "${YELLOW}Configuring environment variables...${NC}"
@@ -286,7 +350,7 @@ for FILE in "$HOME/.xprofile" "$HOME/.profile"; do
 done
 
 # ------------------------------------------------------------
-# 12. Autostart Fcitx5
+# 13. Autostart Fcitx5
 # ------------------------------------------------------------
 echo
 echo -e "${YELLOW}Configuring Fcitx5 autostart...${NC}"
@@ -305,7 +369,7 @@ NoDisplay=false
 EOF
 
 # ------------------------------------------------------------
-# 13. Start Fcitx5
+# 14. Start Fcitx5
 # ------------------------------------------------------------
 echo
 echo -e "${YELLOW}Starting Fcitx5...${NC}"
@@ -317,7 +381,7 @@ nohup fcitx5 -d >/dev/null 2>&1 &
 sleep 2
 
 # ------------------------------------------------------------
-# 14. Verify
+# 15. Verify
 # ------------------------------------------------------------
 echo
 echo -e "${YELLOW}Verifying installation...${NC}"
@@ -330,10 +394,12 @@ else
     echo -e "${RED}Fcitx5 executable not found.${NC}"
 fi
 
-if dpkg -s fcitx5-lotus >/dev/null 2>&1; then
+if dpkg-query -W -f='${Status}' fcitx5-lotus 2>/dev/null | grep -q 'install ok installed'; then
+    LOTUS_VERSION="$(dpkg-query -W -f='${Version}' fcitx5-lotus 2>/dev/null || true)"
     echo -e "${GREEN}Lotus engine: OK${NC}"
+    [ -n "$LOTUS_VERSION" ] && echo "  Version: $LOTUS_VERSION"
 else
-    echo -e "${RED}Lotus engine: NOT FOUND${NC}"
+    echo -e "${RED}Lotus engine: NOT FOUND / NOT CONFIGURED${NC}"
 fi
 
 if pgrep -x fcitx5 >/dev/null 2>&1; then

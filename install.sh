@@ -1,11 +1,17 @@
 #!/usr/bin/env bash
 #
 # Lotus Installer for Ubuntu / Linux Mint / Kubuntu / Zorin OS / Debian
-# Version: 7.0
+# Version: 8.0
 # Supports: X11 + Wayland
 #
 
 set -e
+
+# Validate this installer before making system changes.
+if ! bash -n "$0"; then
+    echo -e "${RED}Installer syntax check failed. No changes were made.${NC}"
+    exit 1
+fi
 
 GREEN="\033[1;32m"
 RED="\033[1;31m"
@@ -15,7 +21,7 @@ NC="\033[0m"
 
 echo -e "${BLUE}"
 echo "======================================="
-echo "     Lotus Installer v7.0"
+echo "     Lotus Installer v8.0"
 echo "     Ubuntu / Mint / Kubuntu / Zorin OS / Debian"
 echo "     X11 + Wayland"
 echo "======================================="
@@ -232,14 +238,10 @@ echo -e "${YELLOW}Installing Lotus engine...${NC}"
 
 sudo apt update
 
-# Some fcitx5-lotus 3.5.6-1 packages contain a /bin/sh postinst
-# with an empty "then" branch:
-#     if systemctl ...; then
-#     else
-#         ...
-#     fi
-# This is rejected by dash on Ubuntu/Zorin. Patch the installed
-# maintainer script before retrying configuration.
+# The published fcitx5-lotus 3.5.6-1 package has a known /bin/sh
+# postinst issue: an empty "then" branch before "else". If the package
+# is already unpacked, repair that script and configure it. If apt
+# installs a fresh package and its postinst fails, repair and retry.
 patch_lotus_postinst() {
     local POSTINST="/var/lib/dpkg/info/fcitx5-lotus.postinst"
 
@@ -250,7 +252,7 @@ patch_lotus_postinst() {
     if sudo grep -qF 'if systemctl enable --now "fcitx5-lotus-server@${REAL_USER}.service" 2>/dev/null; then' "$POSTINST" \
         && sudo grep -qF '            else' "$POSTINST"; then
 
-        echo -e "${YELLOW}Checking Lotus post-install script...${NC}"
+        echo -e "${YELLOW}Repairing Lotus post-install script...${NC}"
 
         sudo sed -i '/if systemctl enable --now "fcitx5-lotus-server@${REAL_USER}.service"/,+3c\
         if systemctl enable --now "fcitx5-lotus-server@${REAL_USER}.service" 2>/dev/null; then\
@@ -259,53 +261,41 @@ patch_lotus_postinst() {
             printf "%b\\n" "  ${yellow}⚠ Chạy lệnh sau để bật service: sudo systemctl enable --now fcitx5-lotus-server@${REAL_USER}.service${all_off}"\
         fi' "$POSTINST"
 
-        echo -e "${GREEN}Lotus post-install script patched.${NC}"
+        echo -e "${GREEN}Lotus post-install script repaired.${NC}"
     fi
 }
 
-# IMPORTANT:
-# apt may return success when fcitx5-lotus is already the newest version,
-# even though the package is unpacked but not configured. Therefore patch
-# the maintainer script BEFORE apt install/configure, not only after failure.
+# Repair an already-unpacked copy before configuration.
 patch_lotus_postinst
 
-if ! sudo apt install -y fcitx5-lotus; then
-    echo
-    echo -e "${YELLOW}APT reported an installation/configuration failure.${NC}"
-
-    # The package can already be unpacked. Repair the postinst and retry.
+if sudo apt install -y fcitx5-lotus; then
+    :
+else
+    echo -e "${YELLOW}APT could not complete Lotus configuration. Repairing dpkg state...${NC}"
     patch_lotus_postinst
 
-    echo -e "${YELLOW}Retrying Lotus configuration...${NC}"
     if ! sudo dpkg --configure fcitx5-lotus; then
         echo
         echo -e "${RED}Failed to configure fcitx5-lotus.${NC}"
-        echo -e "${YELLOW}Showing the Lotus post-install script for diagnosis:${NC}"
+        echo -e "${YELLOW}Lotus post-install script:${NC}"
         sudo nl -ba /var/lib/dpkg/info/fcitx5-lotus.postinst | sed -n '1,80p' || true
         exit 1
     fi
 fi
 
-# apt can report "already the newest version" while dpkg still has the
-# package in an unconfigured state. Always verify and configure explicitly.
+# apt can legitimately say "already the newest version" while dpkg still
+# needs configuration. Verify the final package state explicitly.
 if ! dpkg-query -W -f='${Status}' fcitx5-lotus 2>/dev/null | grep -q 'install ok installed'; then
-    echo -e "${YELLOW}Lotus is installed but not fully configured. Repairing...${NC}"
+    echo -e "${YELLOW}Lotus is installed but not fully configured. Configuring now...${NC}"
     patch_lotus_postinst
 
     if ! sudo dpkg --configure fcitx5-lotus; then
         echo
         echo -e "${RED}Failed to configure fcitx5-lotus.${NC}"
-        echo -e "${YELLOW}Showing the Lotus post-install script for diagnosis:${NC}"
+        echo -e "${YELLOW}Lotus post-install script:${NC}"
         sudo nl -ba /var/lib/dpkg/info/fcitx5-lotus.postinst | sed -n '1,80p' || true
         exit 1
     fi
-fi
-    echo
-    echo -e "${RED}Failed to install fcitx5-lotus.${NC}"
-    echo -e "${YELLOW}The Lotus repository may not provide packages for:${NC}"
-    echo "  OS: ${PRETTY_NAME}"
-    echo "  Codename: ${LOTUS_CODENAME}"
-    exit 1
 fi
 
 # ------------------------------------------------------------
@@ -420,7 +410,7 @@ fi
 
 echo
 echo -e "${BLUE}=======================================${NC}"
-echo -e "${GREEN} Lotus Installer v7.0 completed!${NC}"
+echo -e "${GREEN} Lotus Installer v8.0 completed!${NC}"
 echo -e "${GREEN} X11 + Wayland ready${NC}"
 echo -e "${BLUE}=======================================${NC}"
 echo

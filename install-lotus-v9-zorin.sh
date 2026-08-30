@@ -1,17 +1,11 @@
 #!/usr/bin/env bash
 #
 # Lotus Installer for Ubuntu / Linux Mint / Kubuntu / Zorin OS / Debian
-# Version: 9.0
+# Version: 10.0
 # Supports: X11 + Wayland
 #
 
 set -e
-
-# Preflight: validate this installer before changing the system.
-if ! bash -n "$0"; then
-    echo -e "${RED}Installer syntax error. No system changes were made.${NC}"
-    exit 1
-fi
 
 GREEN="\033[1;32m"
 RED="\033[1;31m"
@@ -19,9 +13,15 @@ YELLOW="\033[1;33m"
 BLUE="\033[1;34m"
 NC="\033[0m"
 
+# Preflight: validate this installer before changing the system.
+if ! bash -n "$0"; then
+    echo -e "${RED}Installer syntax error. No system changes were made.${NC}"
+    exit 1
+fi
+
 echo -e "${BLUE}"
 echo "======================================="
-echo "     Lotus Installer v9.0"
+echo "     Lotus Installer v10.0"
 echo "     Ubuntu / Mint / Kubuntu / Zorin OS / Debian"
 echo "     X11 + Wayland"
 echo "======================================="
@@ -404,7 +404,7 @@ fi
 
 echo
 echo -e "${BLUE}=======================================${NC}"
-echo -e "${GREEN} Lotus Installer v9.0 completed!${NC}"
+echo -e "${GREEN} Lotus Installer v10.0 completed!${NC}"
 echo -e "${GREEN} X11 + Wayland ready${NC}"
 echo -e "${BLUE}=======================================${NC}"
 echo

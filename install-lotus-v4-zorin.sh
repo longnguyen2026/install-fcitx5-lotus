@@ -1,7 +1,7 @@
 #!/usr/bin/env bash
 #
 # Lotus Installer for Ubuntu / Linux Mint / Kubuntu / Zorin OS / Debian
-# Version: 10.0
+# Version: 4.1-Zorin
 # Supports: X11 + Wayland
 #
 
@@ -13,15 +13,9 @@ YELLOW="\033[1;33m"
 BLUE="\033[1;34m"
 NC="\033[0m"
 
-# Preflight: validate this installer before changing the system.
-if ! bash -n "$0"; then
-    echo -e "${RED}Installer syntax error. No system changes were made.${NC}"
-    exit 1
-fi
-
 echo -e "${BLUE}"
 echo "======================================="
-echo "     Lotus Installer v10.0"
+echo "     Lotus Installer v4.1-Zorin"
 echo "     Ubuntu / Mint / Kubuntu / Zorin OS / Debian"
 echo "     X11 + Wayland"
 echo "======================================="
@@ -73,17 +67,14 @@ case "$OS_ID" in
         FAMILY="ubuntu"
         ;;
     zorin)
-        # Zorin OS 18 is Ubuntu 24.04 based and uses noble.
+        # Zorin OS 18 is Ubuntu 24.04 based.
         FAMILY="ubuntu"
         ;;
     debian)
         FAMILY="debian"
         ;;
     *)
-        # Prefer Ubuntu when the distribution declares Ubuntu in ID_LIKE.
-        if echo "$OS_LIKE" | grep -qiE '(^|[[:space:]])ubuntu([[:space:]]|$)'; then
-            FAMILY="ubuntu"
-        elif echo "$OS_LIKE" | grep -qiE '(^|[[:space:]])debian([[:space:]]|$)'; then
+        if echo "$OS_LIKE" | grep -qi "debian"; then
             FAMILY="debian"
         else
             echo -e "${RED}Unsupported operating system: ${PRETTY_NAME}${NC}"
@@ -211,7 +202,7 @@ if [ "$FAMILY" = "debian" ]; then
 
 else
 
-    # Ubuntu / Linux Mint / Kubuntu
+    # Ubuntu / Linux Mint / Kubuntu / Zorin OS
     if [ -z "$BASE_CODENAME" ]; then
         echo -e "${RED}Cannot detect Ubuntu base codename.${NC}"
         exit 1
@@ -230,9 +221,7 @@ sudo mkdir -p /etc/apt/keyrings
 curl -fsSL https://fcitx5-lotus.pages.dev/pubkey.gpg \
     | sudo gpg --dearmor --yes -o /etc/apt/keyrings/fcitx5-lotus.gpg
 
-# Lotus currently publishes the repository for supported Ubuntu/Debian
-# codenames. Zorin OS 18 is Ubuntu noble, so use noble directly.
-echo "deb [arch=amd64 signed-by=/etc/apt/keyrings/fcitx5-lotus.gpg] https://fcitx5-lotus.pages.dev/apt/${LOTUS_CODENAME} ${LOTUS_CODENAME} main" \
+echo "deb [signed-by=/etc/apt/keyrings/fcitx5-lotus.gpg] https://fcitx5-lotus.pages.dev/apt/${LOTUS_CODENAME} ${LOTUS_CODENAME} main" \
     | sudo tee /etc/apt/sources.list.d/fcitx5-lotus.list >/dev/null
 
 # ------------------------------------------------------------
@@ -243,66 +232,17 @@ echo -e "${YELLOW}Installing Lotus engine...${NC}"
 
 sudo apt update
 
-# The published 3.5.6-1 package may already be unpacked on a machine
-# after a previous failed configuration. Repair its /bin/sh postinst
-# before asking dpkg to configure it.
-patch_lotus_postinst() {
-    local POSTINST="/var/lib/dpkg/info/fcitx5-lotus.postinst"
-
-    if [ ! -f "$POSTINST" ]; then
-        return 0
-    fi
-
-    if sudo grep -qF 'if systemctl enable --now "fcitx5-lotus-server@${REAL_USER}.service" 2>/dev/null; then' "$POSTINST" \
-        && sudo grep -qF '            else' "$POSTINST"; then
-
-        echo -e "${YELLOW}Repairing Lotus post-install script...${NC}"
-
-        sudo sed -i '/if systemctl enable --now "fcitx5-lotus-server@${REAL_USER}.service"/,+3c\
-        if systemctl enable --now "fcitx5-lotus-server@${REAL_USER}.service" 2>/dev/null; then\
-            :\
-        else\
-            printf "%b\\n" "  ${yellow}⚠ Chạy lệnh sau để bật service: sudo systemctl enable --now fcitx5-lotus-server@${REAL_USER}.service${all_off}"\
-        fi' "$POSTINST"
-
-        echo -e "${GREEN}Lotus post-install script repaired.${NC}"
-    fi
-}
-
-# First repair an already-unpacked package, if present.
-patch_lotus_postinst
-
-# apt may say "already the newest version" even when dpkg still needs
-# to configure the package, so success here is not treated as final.
-sudo apt install -y fcitx5-lotus || true
-
-# Repair again because a fresh package may have just unpacked postinst.
-patch_lotus_postinst
-
-# Always finish the package explicitly.
-if ! sudo dpkg --configure fcitx5-lotus; then
+if ! sudo apt install -y fcitx5-lotus; then
     echo
-    echo -e "${RED}Failed to configure fcitx5-lotus.${NC}"
-    echo -e "${YELLOW}Lotus post-install script:${NC}"
-    sudo nl -ba /var/lib/dpkg/info/fcitx5-lotus.postinst | sed -n '1,80p' || true
-    exit 1
-fi
-
-if ! dpkg-query -W -f='${Status}' fcitx5-lotus 2>/dev/null | grep -q 'install ok installed'; then
-    echo
-    echo -e "${RED}fcitx5-lotus is not in the installed/configured state.${NC}"
+    echo -e "${RED}Failed to install fcitx5-lotus.${NC}"
+    echo -e "${YELLOW}The Lotus repository may not provide packages for:${NC}"
+    echo "  OS: ${PRETTY_NAME}"
+    echo "  Codename: ${LOTUS_CODENAME}"
     exit 1
 fi
 
 # ------------------------------------------------------------
-# 10. Repair pending packages
-# ------------------------------------------------------------
-echo
-echo -e "${YELLOW}Checking package state...${NC}"
-sudo apt --fix-broken install -y
-
-# ------------------------------------------------------------
-# 11. Set Fcitx5 as default input method
+# 10. Set Fcitx5 as default input method
 # ------------------------------------------------------------
 echo
 echo -e "${YELLOW}Setting Fcitx5 as default input method...${NC}"
@@ -312,7 +252,7 @@ if command -v im-config >/dev/null 2>&1; then
 fi
 
 # ------------------------------------------------------------
-# 12. Environment variables
+# 11. Environment variables
 # ------------------------------------------------------------
 echo
 echo -e "${YELLOW}Configuring environment variables...${NC}"
@@ -346,7 +286,7 @@ for FILE in "$HOME/.xprofile" "$HOME/.profile"; do
 done
 
 # ------------------------------------------------------------
-# 13. Autostart Fcitx5
+# 12. Autostart Fcitx5
 # ------------------------------------------------------------
 echo
 echo -e "${YELLOW}Configuring Fcitx5 autostart...${NC}"
@@ -365,7 +305,7 @@ NoDisplay=false
 EOF
 
 # ------------------------------------------------------------
-# 14. Start Fcitx5
+# 13. Start Fcitx5
 # ------------------------------------------------------------
 echo
 echo -e "${YELLOW}Starting Fcitx5...${NC}"
@@ -377,7 +317,7 @@ nohup fcitx5 -d >/dev/null 2>&1 &
 sleep 2
 
 # ------------------------------------------------------------
-# 15. Verify
+# 14. Verify
 # ------------------------------------------------------------
 echo
 echo -e "${YELLOW}Verifying installation...${NC}"
@@ -404,7 +344,7 @@ fi
 
 echo
 echo -e "${BLUE}=======================================${NC}"
-echo -e "${GREEN} Lotus Installer v10.0 completed!${NC}"
+echo -e "${GREEN} Lotus Installer v4.1-Zorin completed!${NC}"
 echo -e "${GREEN} X11 + Wayland ready${NC}"
 echo -e "${BLUE}=======================================${NC}"
 echo

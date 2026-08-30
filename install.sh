@@ -1,7 +1,7 @@
 #!/usr/bin/env bash
 #
 # Lotus Installer for Ubuntu / Linux Mint / Kubuntu / Zorin OS / Debian
-# Version: 5.0
+# Version: 7.0
 # Supports: X11 + Wayland
 #
 
@@ -15,7 +15,7 @@ NC="\033[0m"
 
 echo -e "${BLUE}"
 echo "======================================="
-echo "     Lotus Installer v5.0"
+echo "     Lotus Installer v7.0"
 echo "     Ubuntu / Mint / Kubuntu / Zorin OS / Debian"
 echo "     X11 + Wayland"
 echo "======================================="
@@ -221,7 +221,7 @@ sudo mkdir -p /etc/apt/keyrings
 curl -fsSL https://fcitx5-lotus.pages.dev/pubkey.gpg \
     | sudo gpg --dearmor --yes -o /etc/apt/keyrings/fcitx5-lotus.gpg
 
-echo "deb [signed-by=/etc/apt/keyrings/fcitx5-lotus.gpg] https://fcitx5-lotus.pages.dev/apt/${LOTUS_CODENAME} ${LOTUS_CODENAME} main" \
+echo "deb [arch=amd64 signed-by=/etc/apt/keyrings/fcitx5-lotus.gpg] https://fcitx5-lotus.pages.dev/apt/${LOTUS_CODENAME} ${LOTUS_CODENAME} main" \
     | sudo tee /etc/apt/sources.list.d/fcitx5-lotus.list >/dev/null
 
 # ------------------------------------------------------------
@@ -263,8 +263,17 @@ patch_lotus_postinst() {
     fi
 }
 
+# IMPORTANT:
+# apt may return success when fcitx5-lotus is already the newest version,
+# even though the package is unpacked but not configured. Therefore patch
+# the maintainer script BEFORE apt install/configure, not only after failure.
+patch_lotus_postinst
+
 if ! sudo apt install -y fcitx5-lotus; then
-    # The package may already be unpacked but fail during configure.
+    echo
+    echo -e "${YELLOW}APT reported an installation/configuration failure.${NC}"
+
+    # The package can already be unpacked. Repair the postinst and retry.
     patch_lotus_postinst
 
     echo -e "${YELLOW}Retrying Lotus configuration...${NC}"
@@ -277,9 +286,10 @@ if ! sudo apt install -y fcitx5-lotus; then
     fi
 fi
 
-# If apt installed/unpacked Lotus but left it unconfigured, make sure the
-# known postinst issue is repaired and finish configuration.
+# apt can report "already the newest version" while dpkg still has the
+# package in an unconfigured state. Always verify and configure explicitly.
 if ! dpkg-query -W -f='${Status}' fcitx5-lotus 2>/dev/null | grep -q 'install ok installed'; then
+    echo -e "${YELLOW}Lotus is installed but not fully configured. Repairing...${NC}"
     patch_lotus_postinst
 
     if ! sudo dpkg --configure fcitx5-lotus; then
@@ -410,7 +420,7 @@ fi
 
 echo
 echo -e "${BLUE}=======================================${NC}"
-echo -e "${GREEN} Lotus Installer v5.0 completed!${NC}"
+echo -e "${GREEN} Lotus Installer v7.0 completed!${NC}"
 echo -e "${GREEN} X11 + Wayland ready${NC}"
 echo -e "${BLUE}=======================================${NC}"
 echo

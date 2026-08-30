@@ -1,15 +1,15 @@
 #!/usr/bin/env bash
 #
 # Lotus Installer for Ubuntu / Linux Mint / Kubuntu / Zorin OS / Debian
-# Version: 8.0
+# Version: 9.0
 # Supports: X11 + Wayland
 #
 
 set -e
 
-# Validate this installer before making system changes.
+# Preflight: validate this installer before changing the system.
 if ! bash -n "$0"; then
-    echo -e "${RED}Installer syntax check failed. No changes were made.${NC}"
+    echo -e "${RED}Installer syntax error. No system changes were made.${NC}"
     exit 1
 fi
 
@@ -21,7 +21,7 @@ NC="\033[0m"
 
 echo -e "${BLUE}"
 echo "======================================="
-echo "     Lotus Installer v8.0"
+echo "     Lotus Installer v9.0"
 echo "     Ubuntu / Mint / Kubuntu / Zorin OS / Debian"
 echo "     X11 + Wayland"
 echo "======================================="
@@ -73,14 +73,17 @@ case "$OS_ID" in
         FAMILY="ubuntu"
         ;;
     zorin)
-        # Zorin OS is Ubuntu-based and uses the Ubuntu codename.
+        # Zorin OS 18 is Ubuntu 24.04 based and uses noble.
         FAMILY="ubuntu"
         ;;
     debian)
         FAMILY="debian"
         ;;
     *)
-        if echo "$OS_LIKE" | grep -qi "debian"; then
+        # Prefer Ubuntu when the distribution declares Ubuntu in ID_LIKE.
+        if echo "$OS_LIKE" | grep -qiE '(^|[[:space:]])ubuntu([[:space:]]|$)'; then
+            FAMILY="ubuntu"
+        elif echo "$OS_LIKE" | grep -qiE '(^|[[:space:]])debian([[:space:]]|$)'; then
             FAMILY="debian"
         else
             echo -e "${RED}Unsupported operating system: ${PRETTY_NAME}${NC}"
@@ -227,6 +230,8 @@ sudo mkdir -p /etc/apt/keyrings
 curl -fsSL https://fcitx5-lotus.pages.dev/pubkey.gpg \
     | sudo gpg --dearmor --yes -o /etc/apt/keyrings/fcitx5-lotus.gpg
 
+# Lotus currently publishes the repository for supported Ubuntu/Debian
+# codenames. Zorin OS 18 is Ubuntu noble, so use noble directly.
 echo "deb [arch=amd64 signed-by=/etc/apt/keyrings/fcitx5-lotus.gpg] https://fcitx5-lotus.pages.dev/apt/${LOTUS_CODENAME} ${LOTUS_CODENAME} main" \
     | sudo tee /etc/apt/sources.list.d/fcitx5-lotus.list >/dev/null
 
@@ -238,10 +243,9 @@ echo -e "${YELLOW}Installing Lotus engine...${NC}"
 
 sudo apt update
 
-# The published fcitx5-lotus 3.5.6-1 package has a known /bin/sh
-# postinst issue: an empty "then" branch before "else". If the package
-# is already unpacked, repair that script and configure it. If apt
-# installs a fresh package and its postinst fails, repair and retry.
+# The published 3.5.6-1 package may already be unpacked on a machine
+# after a previous failed configuration. Repair its /bin/sh postinst
+# before asking dpkg to configure it.
 patch_lotus_postinst() {
     local POSTINST="/var/lib/dpkg/info/fcitx5-lotus.postinst"
 
@@ -265,37 +269,29 @@ patch_lotus_postinst() {
     fi
 }
 
-# Repair an already-unpacked copy before configuration.
+# First repair an already-unpacked package, if present.
 patch_lotus_postinst
 
-if sudo apt install -y fcitx5-lotus; then
-    :
-else
-    echo -e "${YELLOW}APT could not complete Lotus configuration. Repairing dpkg state...${NC}"
-    patch_lotus_postinst
+# apt may say "already the newest version" even when dpkg still needs
+# to configure the package, so success here is not treated as final.
+sudo apt install -y fcitx5-lotus || true
 
-    if ! sudo dpkg --configure fcitx5-lotus; then
-        echo
-        echo -e "${RED}Failed to configure fcitx5-lotus.${NC}"
-        echo -e "${YELLOW}Lotus post-install script:${NC}"
-        sudo nl -ba /var/lib/dpkg/info/fcitx5-lotus.postinst | sed -n '1,80p' || true
-        exit 1
-    fi
+# Repair again because a fresh package may have just unpacked postinst.
+patch_lotus_postinst
+
+# Always finish the package explicitly.
+if ! sudo dpkg --configure fcitx5-lotus; then
+    echo
+    echo -e "${RED}Failed to configure fcitx5-lotus.${NC}"
+    echo -e "${YELLOW}Lotus post-install script:${NC}"
+    sudo nl -ba /var/lib/dpkg/info/fcitx5-lotus.postinst | sed -n '1,80p' || true
+    exit 1
 fi
 
-# apt can legitimately say "already the newest version" while dpkg still
-# needs configuration. Verify the final package state explicitly.
 if ! dpkg-query -W -f='${Status}' fcitx5-lotus 2>/dev/null | grep -q 'install ok installed'; then
-    echo -e "${YELLOW}Lotus is installed but not fully configured. Configuring now...${NC}"
-    patch_lotus_postinst
-
-    if ! sudo dpkg --configure fcitx5-lotus; then
-        echo
-        echo -e "${RED}Failed to configure fcitx5-lotus.${NC}"
-        echo -e "${YELLOW}Lotus post-install script:${NC}"
-        sudo nl -ba /var/lib/dpkg/info/fcitx5-lotus.postinst | sed -n '1,80p' || true
-        exit 1
-    fi
+    echo
+    echo -e "${RED}fcitx5-lotus is not in the installed/configured state.${NC}"
+    exit 1
 fi
 
 # ------------------------------------------------------------
@@ -394,12 +390,10 @@ else
     echo -e "${RED}Fcitx5 executable not found.${NC}"
 fi
 
-if dpkg-query -W -f='${Status}' fcitx5-lotus 2>/dev/null | grep -q 'install ok installed'; then
-    LOTUS_VERSION="$(dpkg-query -W -f='${Version}' fcitx5-lotus 2>/dev/null || true)"
+if dpkg -s fcitx5-lotus >/dev/null 2>&1; then
     echo -e "${GREEN}Lotus engine: OK${NC}"
-    [ -n "$LOTUS_VERSION" ] && echo "  Version: $LOTUS_VERSION"
 else
-    echo -e "${RED}Lotus engine: NOT FOUND / NOT CONFIGURED${NC}"
+    echo -e "${RED}Lotus engine: NOT FOUND${NC}"
 fi
 
 if pgrep -x fcitx5 >/dev/null 2>&1; then
@@ -410,7 +404,7 @@ fi
 
 echo
 echo -e "${BLUE}=======================================${NC}"
-echo -e "${GREEN} Lotus Installer v8.0 completed!${NC}"
+echo -e "${GREEN} Lotus Installer v9.0 completed!${NC}"
 echo -e "${GREEN} X11 + Wayland ready${NC}"
 echo -e "${BLUE}=======================================${NC}"
 echo

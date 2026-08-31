@@ -2,7 +2,7 @@
 
 # Bản cài đặt Lotus nâng cấp đã fix lỗi lag Kubuntu, Zorin
 ```bash
-bash <(curl -fsSL https://raw.githubusercontent.com/longnguyen2026/install-fcitx5-lotus/main/v5.sh)
+bash <(curl -fsSL https://raw.githubusercontent.com/longnguyen2026/install-fcitx5-lotus/main/lotus-v5.sh)
 ```
 # Bản cài đặt Lotus nâng cấp đã fix cho Zorin 
 ```bash

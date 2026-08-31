@@ -1,3 +1,6 @@
+#!/usr/bin/env bash
+set -e
+
 sudo systemctl stop "fcitx5-lotus-server@$(whoami).service" 2>/dev/null || true
 
 # Gỡ Lotus trước

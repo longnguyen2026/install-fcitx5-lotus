@@ -4,3 +4,7 @@
 ```bash
 bash <(curl -fsSL https://raw.githubusercontent.com/longnguyen2026/install-fcitx5-lotus/main/lotus-v8.sh)
 ```
+# Cài bộ gõ tiếng việt Lotus cập nhật 24.10.2026:
+````bash
+bash <(curl -fsSL https://raw.githubusercontent.com/longnguyen2026/install-fcitx5-lotus/main/lotus-v9.sh)
+````
